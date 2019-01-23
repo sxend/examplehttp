@@ -1,5 +1,7 @@
 extern crate http;
 extern crate httparse;
+#[macro_use]
+extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 extern crate tokio;
@@ -29,7 +31,7 @@ pub struct Server {}
 
 fn response(body: String) -> String {
     return format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: {}\r\n\r\n{}",
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: {}\r\n\r\n{}",
         body.len(),
         body
     );
@@ -39,44 +41,60 @@ impl Server {
         let bind_address = format!("{}:{}", config.bind_host, config.bind_port);
         let address = bind_address
             .parse()
-            .expect(&format!("failed to parse bind_address: {}", bind_address));
-        let socket = TcpListener::bind(&address).expect(&format!("failed to bind: {}", address));
+            .expect(&format!("parse bind_address: {}", bind_address));
+        let socket = TcpListener::bind(&address).expect(&format!("bind: {}", address));
 
         let server = socket
             .incoming()
-            .map_err(|e| eprintln!("failed to accept {:?}", e))
+            .map_err(|e| eprintln!("accept {:?}", e))
             .for_each(|stream| {
                 let result = io::read(stream, vec![0; 1024])
-                    .map_err(|e| eprintln!("failed to read {:?}", e))
+                    .map_err(|e| eprintln!("read {:?}", e))
                     .and_then(move |(stream, bytes, size)| {
-                        let mut headers = [httparse::EMPTY_HEADER; 16];
-                        let mut parser = httparse::Request::new(&mut headers);
-                        parser
-                            .parse(&bytes[..size])
-                            .expect("failed to parse http bytes");
-                        let request = Server::convert(parser);
+                        let request = Server::parse_request(&bytes[..size]);
                         Ok((stream, request))
                     })
                     .and_then(move |(stream, request)| {
-                        let message = response(format!("{:?}", request));
+                        let body = serde_json::to_string_pretty(&request).expect("print json");
+                        let message = response(body);
                         io::write_all(stream, message)
-                            .map_err(|e| eprintln!("failed to write {:?}", e))
+                            .map_err(|e| eprintln!("write {:?}", e))
                             .and_then(move |_| Ok(()))
                     });
                 tokio::spawn(result)
             });
         tokio::run(server);
     }
-    fn convert(parser: httparse::Request) -> http::Request<()> {
-        let mut builder = &mut http::Request::builder();
-        builder = builder.method(parser.method.expect("failed to parse method"));
-        for h in parser.headers {
-            builder = builder.header(
-                h.name,
-                String::from_utf8(h.value.to_vec())
-                    .expect(&format!("failed to parse header value: {:?}", h)),
-            );
+    fn parse_request<'a>(bytes: &[u8]) -> Request {
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let mut request: httparse::Request = httparse::Request::new(&mut headers);
+        request.parse(bytes).expect("parse http bytes");
+        let own_headers = &mut Vec::new();
+        for h in request.headers {
+            own_headers.push(Header {
+                name: h.name.to_owned(),
+                value: String::from_utf8(h.value.to_vec()).expect("parse header value"),
+            })
         }
-        builder.body(()).expect("failed to build http response")
+        Request {
+            version: request.version.expect("parse version").to_owned(),
+            method: request.method.expect("parse method").to_owned(),
+            path: request.path.expect("parse path").to_owned(),
+            headers: own_headers.to_owned(),
+        }
     }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct Request {
+    version: u8,
+    method: String,
+    path: String,
+    headers: Vec<Header>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct Header {
+    name: String,
+    value: String,
 }
