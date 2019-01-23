@@ -59,11 +59,11 @@ impl Server {
                     })
                     .and_then(move |(stream, request)| {
                         let message = response(format!("{:?}", request));
+                        println!("process request!");
                         io::write_all(stream, message)
                             .map_err(|e| eprintln!("failed to write {:?}", e))
                             .and_then(move |_| Ok(()))
                     });
-
                 tokio::spawn(result)
             });
         tokio::run(server);
