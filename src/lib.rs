@@ -65,7 +65,7 @@ impl Server {
             });
         tokio::run(server);
     }
-    fn parse_request<'a>(bytes: &[u8]) -> Request {
+    fn parse_request(bytes: &[u8]) -> Request {
         let mut headers = [httparse::EMPTY_HEADER; 16];
         let mut request: httparse::Request = httparse::Request::new(&mut headers);
         request.parse(bytes).expect("parse http bytes");
