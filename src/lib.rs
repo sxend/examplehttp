@@ -11,7 +11,9 @@ extern crate tokio_net;
 
 use futures;
 use futures::future::FutureResult;
+use std::cell::RefCell;
 use std::sync::Arc;
+use std::sync::Mutex;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
@@ -32,7 +34,7 @@ impl Configuration {}
 
 pub struct Server {
     config: Configuration,
-    handler: Arc<Option<Handler>>,
+    handler: Arc<Mutex<RefCell<Handler>>>,
 }
 
 type Handler = fn(Request) -> Box<FutureResult<Response, std::io::Error>>;
@@ -41,11 +43,13 @@ impl Server {
     pub fn new(config: Configuration) -> Self {
         Server {
             config,
-            handler: Arc::new(None),
+            handler: Arc::new(Mutex::new(RefCell::new(NO_HANDLER))),
         }
     }
     pub fn with_handler(&mut self, handler: Handler) {
-        self.handler = Arc::new(Some(handler));
+        let handler_arc = self.handler.clone();
+        let handler_cell = handler_arc.lock().unwrap();
+        handler_cell.replace(handler);
     }
     pub fn start(&self) {
         let bind_address = format!("{}:{}", self.config.bind_host, self.config.bind_port);
@@ -68,11 +72,11 @@ impl Server {
 
 struct StreamHandler {
     stream: TcpStream,
-    handler: Arc<Option<Handler>>,
+    handler: Arc<Mutex<RefCell<Handler>>>,
 }
 
 impl StreamHandler {
-    fn new(stream: TcpStream, handler: Arc<Option<Handler>>) -> StreamHandler {
+    fn new(stream: TcpStream, handler: Arc<Mutex<RefCell<Handler>>>) -> StreamHandler {
         StreamHandler { stream, handler }
     }
     fn handle(self) {
@@ -85,11 +89,16 @@ impl StreamHandler {
                 Ok((stream, request))
             })
             .and_then(move |(stream, request)| {
-                let body = match *handler {
-                    Some(handler) => handler(request),
-                    None => Box::new(futures::future::ok(no_handler())),
+                let handler = match handler.lock() {
+                    Ok(mutex) => mutex.clone(),
+                    Err(e) => {
+                        eprintln!("handler error {:?}", e);
+                        RefCell::new(NO_HANDLER)
+                    }
                 };
-                body.map_err(|e| eprintln!("body {:?}", e))
+                let response = handler.borrow()(request);
+                response
+                    .map_err(|e| eprintln!("body {:?}", e))
                     .and_then(|response| {
                         let message = stringify_response(response);
                         io::write_all(stream, message)
@@ -101,12 +110,12 @@ impl StreamHandler {
     }
 }
 
-fn no_handler() -> Response {
-    Response {
+const NO_HANDLER: Handler = |_| {
+    Box::new(future::ok(Response {
         content_type: "text/plain".to_owned(),
         body: "no handler".to_owned(),
-    }
-}
+    }))
+};
 
 fn stringify_response(response: Response) -> String {
     return format!(
