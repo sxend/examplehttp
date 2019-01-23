@@ -5,4 +5,4 @@ PORT=${PORT:-9000}
 
 git pull origin master
 
-cargo run --release --example main -- --port=${PORT}
+RUST_BACKTRACE=1 cargo run --release --example main -- --port=${PORT}
