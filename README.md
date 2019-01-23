@@ -1,4 +1,4 @@
 
 ```
-cargo run --release --example main
+ cargo run --example main -- --port=8000
 ```

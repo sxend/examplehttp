@@ -12,12 +12,14 @@ use tokio::net::TcpListener;
 use tokio::prelude::*;
 
 pub struct Configuration {
-    bind_address: String,
+    pub bind_host: String,
+    pub bind_port: u32,
 }
 impl Default for Configuration {
     fn default() -> Self {
         Self {
-            bind_address: "0.0.0.0:9000".to_owned(),
+            bind_host: "0.0.0.0".to_owned(),
+            bind_port: 9000,
         }
     }
 }
@@ -34,7 +36,8 @@ fn response(body: String) -> String {
 }
 impl Server {
     pub fn start(config: Configuration) {
-        let address = config.bind_address.parse().unwrap();
+        let bind_address = format!("{}:{}", config.bind_host, config.bind_port);
+        let address = bind_address.parse().unwrap();
         let socket = TcpListener::bind(&address).unwrap();
 
         let server = socket
