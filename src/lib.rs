@@ -37,8 +37,10 @@ fn response(body: String) -> String {
 impl Server {
     pub fn start(config: Configuration) {
         let bind_address = format!("{}:{}", config.bind_host, config.bind_port);
-        let address = bind_address.parse().unwrap();
-        let socket = TcpListener::bind(&address).unwrap();
+        let address = bind_address
+            .parse()
+            .expect(&format!("failed to parse bind_address: {}", bind_address));
+        let socket = TcpListener::bind(&address).expect(&format!("failed to bind: {}", address));
 
         let server = socket
             .incoming()
@@ -49,7 +51,9 @@ impl Server {
                     .and_then(move |(stream, bytes, size)| {
                         let mut headers = [httparse::EMPTY_HEADER; 16];
                         let mut parser = httparse::Request::new(&mut headers);
-                        parser.parse(&bytes[..size]).unwrap();
+                        parser
+                            .parse(&bytes[..size])
+                            .expect("failed to parse http bytes");
                         let request = Server::convert(parser);
                         Ok((stream, request))
                     })
@@ -66,10 +70,14 @@ impl Server {
     }
     fn convert(parser: httparse::Request) -> http::Request<()> {
         let mut builder = &mut http::Request::builder();
-        builder = builder.method(parser.method.unwrap());
+        builder = builder.method(parser.method.expect("failed to parse method"));
         for h in parser.headers {
-            builder = builder.header(h.name, String::from_utf8(h.value.to_vec()).unwrap());
+            builder = builder.header(
+                h.name,
+                String::from_utf8(h.value.to_vec())
+                    .expect(&format!("failed to parse header value: {:?}", h)),
+            );
         }
-        builder.body(()).unwrap()
+        builder.body(()).expect("failed to build http response")
     }
 }
