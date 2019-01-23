@@ -17,13 +17,20 @@ fn main() {
         )
         .get_matches();
     let mut config: Configuration = Default::default();
-    config.bind_port = matches.value_of("port").unwrap_or("9000").parse().unwrap();
+    config.bind_port = matches
+        .value_of("port")
+        .unwrap_or("9000")
+        .parse()
+        .expect("get bind port");
     let mut server = examplehttp::Server::new(config);
     server.with_handler(|request: Request| {
-        Box::new(future::ok(Response {
-            content_type: "application/json".to_owned(),
-            body: serde_json::to_string_pretty(&request).unwrap(),
-        }))
+        let response = future::lazy(move || {
+            Ok(Response {
+                content_type: "application/json".to_owned(),
+                body: serde_json::to_string_pretty(&request).expect("serialize request"),
+            })
+        });
+        Box::new(response)
     });
     server.start();
 }

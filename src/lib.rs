@@ -9,8 +9,6 @@ extern crate tokio_codec;
 extern crate tokio_io;
 extern crate tokio_net;
 
-use futures;
-use futures::future::FutureResult;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -37,7 +35,7 @@ pub struct Server {
     handler: Arc<Mutex<RefCell<Handler>>>,
 }
 
-type Handler = fn(Request) -> Box<FutureResult<Response, std::io::Error>>;
+type Handler = fn(Request) -> Box<Future<Item = Response, Error = std::io::Error> + Send>;
 
 impl Server {
     pub fn new(config: Configuration) -> Self {
@@ -48,15 +46,15 @@ impl Server {
     }
     pub fn with_handler(&mut self, handler: Handler) {
         let handler_arc = self.handler.clone();
-        let handler_cell = handler_arc.lock().unwrap();
+        let handler_cell = handler_arc.lock().expect("get handler mutex lock");
         handler_cell.replace(handler);
     }
     pub fn start(&self) {
         let bind_address = format!("{}:{}", self.config.bind_host, self.config.bind_port);
         let address = bind_address
             .parse()
-            .expect(&format!("parse bind_address: {}", bind_address));
-        let listener = TcpListener::bind(&address).expect(&format!("bind: {}", address));
+            .unwrap_or_else(|_| panic!("parse bind_address: {}", bind_address));
+        let listener = TcpListener::bind(&address).unwrap_or_else(|_| panic!("bind: {}", address));
 
         let handler = self.handler.clone();
         let server = listener
