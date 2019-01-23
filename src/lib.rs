@@ -9,8 +9,11 @@ extern crate tokio_codec;
 extern crate tokio_io;
 extern crate tokio_net;
 
+use futures;
+use futures::future::FutureResult;
+use std::sync::Arc;
 use tokio::io;
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
 
 pub struct Configuration {
@@ -27,74 +30,128 @@ impl Default for Configuration {
 }
 impl Configuration {}
 
-pub struct Server {}
-
-fn response(body: String) -> String {
-    return format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: {}\r\n\r\n{}",
-        body.len(),
-        body
-    );
+pub struct Server {
+    config: Configuration,
+    handler: Arc<Option<Handler>>,
 }
+
+type Handler = fn(Request) -> Box<FutureResult<Response, std::io::Error>>;
+
 impl Server {
-    pub fn start(config: Configuration) {
-        let bind_address = format!("{}:{}", config.bind_host, config.bind_port);
+    pub fn new(config: Configuration) -> Self {
+        Server {
+            config,
+            handler: Arc::new(None),
+        }
+    }
+    pub fn with_handler(&mut self, handler: Handler) {
+        self.handler = Arc::new(Some(handler));
+    }
+    pub fn start(&self) {
+        let bind_address = format!("{}:{}", self.config.bind_host, self.config.bind_port);
         let address = bind_address
             .parse()
             .expect(&format!("parse bind_address: {}", bind_address));
-        let socket = TcpListener::bind(&address).expect(&format!("bind: {}", address));
+        let listener = TcpListener::bind(&address).expect(&format!("bind: {}", address));
 
-        let server = socket
+        let handler = self.handler.clone();
+        let server = listener
             .incoming()
             .map_err(|e| eprintln!("accept {:?}", e))
-            .for_each(|stream| {
-                let result = io::read(stream, vec![0; 1024])
-                    .map_err(|e| eprintln!("read {:?}", e))
-                    .and_then(move |(stream, bytes, size)| {
-                        let request = Server::parse_request(&bytes[..size]);
-                        Ok((stream, request))
-                    })
-                    .and_then(move |(stream, request)| {
-                        let body = serde_json::to_string_pretty(&request).expect("print json");
-                        let message = response(body);
-                        io::write_all(stream, message)
-                            .map_err(|e| eprintln!("write {:?}", e))
-                            .and_then(move |_| Ok(()))
-                    });
-                tokio::spawn(result)
+            .for_each(move |stream| {
+                StreamHandler::new(stream, handler.clone()).handle();
+                Ok(())
             });
         tokio::run(server);
     }
-    fn parse_request(bytes: &[u8]) -> Request {
-        let mut headers = [httparse::EMPTY_HEADER; 16];
-        let mut request: httparse::Request = httparse::Request::new(&mut headers);
-        request.parse(bytes).expect("parse http bytes");
-        let own_headers = &mut Vec::new();
-        for h in request.headers {
-            own_headers.push(Header {
-                name: h.name.to_owned(),
-                value: String::from_utf8(h.value.to_vec()).expect("parse header value"),
+}
+
+struct StreamHandler {
+    stream: TcpStream,
+    handler: Arc<Option<Handler>>,
+}
+
+impl StreamHandler {
+    fn new(stream: TcpStream, handler: Arc<Option<Handler>>) -> StreamHandler {
+        StreamHandler { stream, handler }
+    }
+    fn handle(self) {
+        let stream = self.stream;
+        let handler = self.handler.clone();
+        let result = io::read(stream, vec![0; 1024])
+            .map_err(|e| eprintln!("read {:?}", e))
+            .and_then(|(stream, bytes, size)| {
+                let request = parse_request(&bytes[..size]);
+                Ok((stream, request))
             })
-        }
-        Request {
-            version: request.version.expect("parse version").to_owned(),
-            method: request.method.expect("parse method").to_owned(),
-            path: request.path.expect("parse path").to_owned(),
-            headers: own_headers.to_owned(),
-        }
+            .and_then(move |(stream, request)| {
+                let body = match *handler {
+                    Some(handler) => handler(request),
+                    None => Box::new(futures::future::ok(no_handler())),
+                };
+                body.map_err(|e| eprintln!("body {:?}", e))
+                    .and_then(|response| {
+                        let message = stringify_response(response);
+                        io::write_all(stream, message)
+                            .map_err(|e| eprintln!("write {:?}", e))
+                            .and_then(move |_| Ok(()))
+                    })
+            });
+        tokio::spawn(result);
+    }
+}
+
+fn no_handler() -> Response {
+    Response {
+        content_type: "text/plain".to_owned(),
+        body: "no handler".to_owned(),
+    }
+}
+
+fn stringify_response(response: Response) -> String {
+    return format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: {}; charset=UTF-8\r\nContent-Length: {}\r\n\r\n{}",
+        response.content_type,
+        response.body.len(),
+        response.body
+    );
+}
+
+fn parse_request(bytes: &[u8]) -> Request {
+    let mut headers = [httparse::EMPTY_HEADER; 16];
+    let mut request: httparse::Request = httparse::Request::new(&mut headers);
+    request.parse(bytes).expect("parse http bytes");
+    let own_headers = &mut Vec::new();
+    for h in request.headers {
+        own_headers.push(Header {
+            name: h.name.to_owned(),
+            value: String::from_utf8(h.value.to_vec()).expect("parse header value"),
+        })
+    }
+    Request {
+        version: request.version.expect("parse version").to_owned(),
+        method: request.method.expect("parse method").to_owned(),
+        path: request.path.expect("parse path").to_owned(),
+        headers: own_headers.to_owned(),
     }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-struct Request {
-    version: u8,
-    method: String,
-    path: String,
-    headers: Vec<Header>,
+pub struct Request {
+    pub version: u8,
+    pub method: String,
+    pub path: String,
+    pub headers: Vec<Header>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-struct Header {
-    name: String,
-    value: String,
+pub struct Response {
+    pub content_type: String,
+    pub body: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Header {
+    pub name: String,
+    pub value: String,
 }
