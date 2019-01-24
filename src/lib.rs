@@ -6,8 +6,10 @@ extern crate serde;
 extern crate serde_json;
 extern crate tokio;
 extern crate tokio_codec;
+extern crate tokio_executor;
 extern crate tokio_io;
 extern crate tokio_net;
+extern crate tokio_threadpool;
 #[macro_use]
 extern crate log;
 
@@ -16,12 +18,14 @@ use std::sync::Arc;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
+use tokio_threadpool::ThreadPool;
 
 #[derive(Debug, Clone)]
 pub struct Configuration {
     pub bind_host: String,
     pub bind_port: u32,
     pub use_loop: bool,
+    pub thread_pool_size: usize,
 }
 impl Default for Configuration {
     fn default() -> Self {
@@ -29,6 +33,7 @@ impl Default for Configuration {
             bind_host: "0.0.0.0".to_owned(),
             bind_port: 8888,
             use_loop: true,
+            thread_pool_size: 4,
         }
     }
 }
@@ -37,15 +42,22 @@ impl Configuration {}
 pub struct Server {
     config: Configuration,
     handler: Arc<Handler>,
+    executor: Arc<ThreadPool>,
 }
 
 type Handler = fn(Request) -> Box<Future<Item = Response, Error = std::io::Error> + Send>;
 
 impl Server {
     pub fn new(config: Configuration) -> Self {
+        let thread_pool_size = config.thread_pool_size;
         Server {
             config,
             handler: Arc::new(NO_HANDLER),
+            executor: Arc::new(
+                tokio_threadpool::Builder::new()
+                    .pool_size(thread_pool_size)
+                    .build(),
+            ),
         }
     }
     pub fn with_handler(&mut self, handler: Handler) {
@@ -59,19 +71,25 @@ impl Server {
         let listener = TcpListener::bind(&address).unwrap_or_else(|_| panic!("bind: {}", address));
 
         let handler = self.handler.clone();
+        let executor = self.executor.clone();
         let use_loop = self.config.use_loop;
         let server = listener
             .incoming()
             .map_err(|e| error!("accept {:?}", e))
             .for_each(move |stream| {
-                handle_stream(stream, handler.clone(), use_loop);
+                handle_stream(stream, executor.clone(), handler.clone(), use_loop);
                 Ok(())
             });
         tokio::run(server);
     }
 }
 
-fn handle_stream(stream: TcpStream, handler: Arc<Handler>, use_loop: bool) {
+fn handle_stream(
+    stream: TcpStream,
+    executor: Arc<ThreadPool>,
+    handler: Arc<Handler>,
+    use_loop: bool,
+) {
     let request = if use_loop {
         read_request_loop(stream)
     } else {
@@ -90,8 +108,7 @@ fn handle_stream(stream: TcpStream, handler: Arc<Handler>, use_loop: bool) {
                         .and_then(move |_| Ok(()))
                 })
         });
-
-    tokio::spawn(result);
+    executor.spawn(result);
 }
 
 const NO_HANDLER: Handler = |_| {

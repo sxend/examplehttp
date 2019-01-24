@@ -26,6 +26,12 @@ fn main() {
                 .takes_value(true)
                 .default_value("true"),
         )
+        .arg(
+            Arg::with_name("thread_pool_size")
+                .long("thread-pool-size")
+                .takes_value(true)
+                .default_value("4"),
+        )
         .get_matches();
     let mut config: Configuration = Default::default();
     config.bind_port = matches
@@ -34,6 +40,11 @@ fn main() {
         .parse()
         .expect("get bind port");
     config.use_loop = matches.value_of("use_loop").unwrap_or_default() == "true";
+    config.thread_pool_size = matches
+        .value_of("thread_pool_size")
+        .unwrap_or_default()
+        .parse()
+        .expect("thread pool size");
     info!("config: {:?}", config);
     let mut server = examplehttp::Server::new(config);
     server.with_handler(|request: Request| {
