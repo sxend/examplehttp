@@ -27,7 +27,7 @@ impl Default for Configuration {
     fn default() -> Self {
         Self {
             bind_host: "0.0.0.0".to_owned(),
-            bind_port: 9000,
+            bind_port: 8888,
             use_loop: true,
         }
     }

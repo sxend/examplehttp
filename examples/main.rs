@@ -30,7 +30,7 @@ fn main() {
     let mut config: Configuration = Default::default();
     config.bind_port = matches
         .value_of("port")
-        .unwrap_or("9000")
+        .unwrap_or("8888")
         .parse()
         .expect("get bind port");
     config.use_loop = matches.value_of("use_loop").unwrap_or_default() == "true";
