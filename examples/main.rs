@@ -1,6 +1,9 @@
 extern crate clap;
 extern crate examplehttp;
 extern crate futures;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde;
 extern crate serde_json;
 #[macro_use]
 extern crate log;
@@ -49,12 +52,33 @@ fn main() {
     let mut server = examplehttp::Server::new(config);
     server.with_handler(|request: Request| {
         let response = future::lazy(move || {
+            let current_thread = std::thread::current();
             Ok(Response {
                 content_type: "application/json".to_owned(),
-                body: serde_json::to_string_pretty(&request).expect("serialize request"),
+                body: serde_json::to_string_pretty(&Message {
+                    request,
+                    ext: Ext {
+                        process_thread: format!(
+                            "{}:{:?}",
+                            current_thread.name().expect("get thread name"),
+                            current_thread.id()
+                        ),
+                    },
+                })
+                .expect("serialize request"),
             })
         });
         Box::new(response)
     });
     server.start();
+}
+#[derive(Serialize, Deserialize, Clone)]
+struct Message {
+    request: examplehttp::Request,
+    ext: Ext,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct Ext {
+    process_thread: String,
 }

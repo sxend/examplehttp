@@ -57,6 +57,7 @@ impl Server {
             executor: Arc::new(
                 tokio_threadpool::Builder::new()
                     .pool_size(thread_pool_size)
+                    .name_prefix("examplehttp-thread-pool")
                     .build(),
             ),
         }
