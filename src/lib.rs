@@ -124,31 +124,44 @@ fn stringify_response(response: Response) -> String {
 fn read_request(
     stream: TcpStream,
 ) -> Box<Future<Item = (TcpStream, Request), Error = std::io::Error> + Send> {
-    let result = future::loop_fn((stream, Vec::new()), move |(stream, mut buf)| {
-        io::read(stream, vec![0; 1024]).and_then(move |(stream, bytes, size)| {
-            let mut parser = httparse::Request {
-                method: None,
-                path: None,
-                version: None,
-                headers: &mut [httparse::EMPTY_HEADER; 16],
-            };
-            buf.extend_from_slice(&bytes[..size]);
-            let result = parser.parse(&buf).expect("parse http bytes");
+    let result = future::loop_fn(
+        (stream, Vec::new(), 10),
+        move |(stream, mut buf, header_size)| {
+            io::read(stream, vec![0; 1024]).and_then(move |(stream, bytes, size)| {
+                buf.extend_from_slice(&bytes[..size]);
+                parse_request(stream, buf, header_size)
+            })
+        },
+    );
+    Box::new(result)
+}
+type ParseLoopResult =
+    Result<future::Loop<(TcpStream, Request), (TcpStream, Vec<u8>, usize)>, std::io::Error>;
+fn parse_request(stream: TcpStream, buf: Vec<u8>, header_size: usize) -> ParseLoopResult {
+    let mut parser = httparse::Request {
+        method: None,
+        path: None,
+        version: None,
+        headers: &mut vec![httparse::EMPTY_HEADER; header_size],
+    };
+    match parser.parse(&buf) {
+        Ok(result) => {
             if result.is_complete() {
                 Ok(future::Loop::Break((stream, convert_request(parser))))
             } else {
-                Ok(future::Loop::Continue((stream, buf)))
+                Ok(future::Loop::Continue((stream, buf, header_size)))
             }
-        })
-    });
-    Box::new(result)
+        }
+        Err(httparse::Error::TooManyHeaders) => parse_request(stream, buf, header_size + 10),
+        Err(e) => panic!(e),
+    }
 }
 fn convert_request(request: httparse::Request) -> Request {
     let own_headers = &mut Vec::new();
-    for h in request.headers {
+    for header in request.headers {
         own_headers.push(Header {
-            name: h.name.to_owned(),
-            value: String::from_utf8(h.value.to_vec()).expect("parse header value"),
+            name: header.name.to_owned(),
+            value: String::from_utf8(header.value.to_vec()).expect("parse header value"),
         })
     }
     Request {
