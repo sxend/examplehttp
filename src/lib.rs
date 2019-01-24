@@ -9,6 +9,7 @@ extern crate tokio_codec;
 extern crate tokio_io;
 extern crate tokio_net;
 
+use futures::future;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -80,12 +81,8 @@ impl StreamHandler {
     fn handle(self) {
         let stream = self.stream;
         let handler = self.handler.clone();
-        let result = io::read(stream, vec![0; 1024])
+        let result = read_request(stream)
             .map_err(|e| eprintln!("read {:?}", e))
-            .and_then(|(stream, bytes, size)| {
-                let request = parse_request(&bytes[..size]);
-                Ok((stream, request))
-            })
             .and_then(move |(stream, request)| {
                 let handler = match handler.lock() {
                     Ok(mutex) => mutex.clone(),
@@ -124,10 +121,29 @@ fn stringify_response(response: Response) -> String {
     );
 }
 
-fn parse_request(bytes: &[u8]) -> Request {
-    let mut headers = [httparse::EMPTY_HEADER; 16];
-    let mut request: httparse::Request = httparse::Request::new(&mut headers);
-    request.parse(bytes).expect("parse http bytes");
+fn read_request(
+    stream: TcpStream,
+) -> Box<Future<Item = (TcpStream, Request), Error = std::io::Error> + Send> {
+    let result = future::loop_fn((stream, Vec::new()), move |(stream, mut buf)| {
+        io::read(stream, vec![0; 1024]).and_then(move |(stream, bytes, size)| {
+            let mut parser = httparse::Request {
+                method: None,
+                path: None,
+                version: None,
+                headers: &mut [httparse::EMPTY_HEADER; 16],
+            };
+            buf.extend_from_slice(&bytes[..size]);
+            let result = parser.parse(&buf).expect("parse http bytes");
+            if result.is_complete() {
+                Ok(future::Loop::Break((stream, convert_request(parser))))
+            } else {
+                Ok(future::Loop::Continue((stream, buf)))
+            }
+        })
+    });
+    Box::new(result)
+}
+fn convert_request(request: httparse::Request) -> Request {
     let own_headers = &mut Vec::new();
     for h in request.headers {
         own_headers.push(Header {
