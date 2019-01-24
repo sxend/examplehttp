@@ -10,9 +10,7 @@ extern crate tokio_io;
 extern crate tokio_net;
 
 use futures::future;
-use std::cell::RefCell;
 use std::sync::Arc;
-use std::sync::Mutex;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
@@ -33,7 +31,7 @@ impl Configuration {}
 
 pub struct Server {
     config: Configuration,
-    handler: Arc<Mutex<RefCell<Handler>>>,
+    handler: Arc<Handler>,
 }
 
 type Handler = fn(Request) -> Box<Future<Item = Response, Error = std::io::Error> + Send>;
@@ -42,13 +40,11 @@ impl Server {
     pub fn new(config: Configuration) -> Self {
         Server {
             config,
-            handler: Arc::new(Mutex::new(RefCell::new(NO_HANDLER))),
+            handler: Arc::new(NO_HANDLER),
         }
     }
     pub fn with_handler(&mut self, handler: Handler) {
-        let handler_arc = self.handler.clone();
-        let handler_cell = handler_arc.lock().expect("get handler mutex lock");
-        handler_cell.replace(handler);
+        self.handler = Arc::new(handler);
     }
     pub fn start(&self) {
         let bind_address = format!("{}:{}", self.config.bind_host, self.config.bind_port);
@@ -62,47 +58,29 @@ impl Server {
             .incoming()
             .map_err(|e| eprintln!("accept {:?}", e))
             .for_each(move |stream| {
-                StreamHandler::new(stream, handler.clone()).handle();
+                handle_stream(stream, handler.clone());
                 Ok(())
             });
         tokio::run(server);
     }
 }
 
-struct StreamHandler {
-    stream: TcpStream,
-    handler: Arc<Mutex<RefCell<Handler>>>,
-}
+fn handle_stream(stream: TcpStream, handler: Arc<Handler>) {
+    let result = read_request(stream)
+        .map_err(|e| eprintln!("read {:?}", e))
+        .and_then(move |(stream, request)| {
+            let response = handler(request);
+            response
+                .map_err(|e| eprintln!("body {:?}", e))
+                .and_then(|response| {
+                    let message = stringify_response(response);
+                    io::write_all(stream, message)
+                        .map_err(|e| eprintln!("write {:?}", e))
+                        .and_then(move |_| Ok(()))
+                })
+        });
 
-impl StreamHandler {
-    fn new(stream: TcpStream, handler: Arc<Mutex<RefCell<Handler>>>) -> StreamHandler {
-        StreamHandler { stream, handler }
-    }
-    fn handle(self) {
-        let stream = self.stream;
-        let handler = self.handler.clone();
-        let result = read_request(stream)
-            .map_err(|e| eprintln!("read {:?}", e))
-            .and_then(move |(stream, request)| {
-                let handler = match handler.lock() {
-                    Ok(mutex) => mutex.clone(),
-                    Err(e) => {
-                        eprintln!("handler error {:?}", e);
-                        RefCell::new(NO_HANDLER)
-                    }
-                };
-                let response = handler.borrow()(request);
-                response
-                    .map_err(|e| eprintln!("body {:?}", e))
-                    .and_then(|response| {
-                        let message = stringify_response(response);
-                        io::write_all(stream, message)
-                            .map_err(|e| eprintln!("write {:?}", e))
-                            .and_then(move |_| Ok(()))
-                    })
-            });
-        tokio::spawn(result);
-    }
+    tokio::spawn(result);
 }
 
 const NO_HANDLER: Handler = |_| {
