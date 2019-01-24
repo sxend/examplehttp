@@ -2,12 +2,17 @@ extern crate clap;
 extern crate examplehttp;
 extern crate futures;
 extern crate serde_json;
+#[macro_use]
+extern crate log;
+extern crate env_logger;
 
 use clap::{App, Arg};
 use examplehttp::{Configuration, Request, Response};
 use futures::future;
 
 fn main() {
+    env_logger::init();
+    log_enabled!(log::Level::Info);
     let matches = App::new("examplehttp")
         .arg(
             Arg::with_name("port")
@@ -18,7 +23,8 @@ fn main() {
         .arg(
             Arg::with_name("use_loop")
                 .long("use-loop")
-                .takes_value(true),
+                .takes_value(true)
+                .default_value("true"),
         )
         .get_matches();
     let mut config: Configuration = Default::default();
@@ -27,8 +33,8 @@ fn main() {
         .unwrap_or("9000")
         .parse()
         .expect("get bind port");
-    config.use_loop = matches.value_of("use_loop").unwrap_or("true") == "true";
-    println!("config: {:?}", config);
+    config.use_loop = matches.value_of("use_loop").unwrap_or_default() == "true";
+    info!("config: {:?}", config);
     let mut server = examplehttp::Server::new(config);
     server.with_handler(|request: Request| {
         let response = future::lazy(move || {

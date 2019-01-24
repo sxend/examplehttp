@@ -8,6 +8,8 @@ extern crate tokio;
 extern crate tokio_codec;
 extern crate tokio_io;
 extern crate tokio_net;
+#[macro_use]
+extern crate log;
 
 use futures::future;
 use std::sync::Arc;
@@ -60,7 +62,7 @@ impl Server {
         let use_loop = self.config.use_loop;
         let server = listener
             .incoming()
-            .map_err(|e| eprintln!("accept {:?}", e))
+            .map_err(|e| error!("accept {:?}", e))
             .for_each(move |stream| {
                 handle_stream(stream, handler.clone(), use_loop);
                 Ok(())
@@ -75,20 +77,19 @@ fn handle_stream(stream: TcpStream, handler: Arc<Handler>, use_loop: bool) {
     } else {
         read_request(stream)
     };
-    let result =
-        request
-            .map_err(|e| eprintln!("read {:?}", e))
-            .and_then(move |(stream, request)| {
-                let response = handler(request);
-                response
-                    .map_err(|e| eprintln!("body {:?}", e))
-                    .and_then(|response| {
-                        let message = stringify_response(response);
-                        io::write_all(stream, message)
-                            .map_err(|e| eprintln!("write {:?}", e))
-                            .and_then(move |_| Ok(()))
-                    })
-            });
+    let result = request
+        .map_err(|e| error!("read {:?}", e))
+        .and_then(move |(stream, request)| {
+            let response = handler(request);
+            response
+                .map_err(|e| error!("body {:?}", e))
+                .and_then(|response| {
+                    let message = stringify_response(response);
+                    io::write_all(stream, message)
+                        .map_err(|e| error!("write {:?}", e))
+                        .and_then(move |_| Ok(()))
+                })
+        });
 
     tokio::spawn(result);
 }
