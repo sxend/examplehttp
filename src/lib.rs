@@ -15,15 +15,18 @@ use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
 
+#[derive(Debug, Clone)]
 pub struct Configuration {
     pub bind_host: String,
     pub bind_port: u32,
+    pub use_loop: bool,
 }
 impl Default for Configuration {
     fn default() -> Self {
         Self {
             bind_host: "0.0.0.0".to_owned(),
             bind_port: 9000,
+            use_loop: true,
         }
     }
 }
@@ -54,31 +57,38 @@ impl Server {
         let listener = TcpListener::bind(&address).unwrap_or_else(|_| panic!("bind: {}", address));
 
         let handler = self.handler.clone();
+        let use_loop = self.config.use_loop;
         let server = listener
             .incoming()
             .map_err(|e| eprintln!("accept {:?}", e))
             .for_each(move |stream| {
-                handle_stream(stream, handler.clone());
+                handle_stream(stream, handler.clone(), use_loop);
                 Ok(())
             });
         tokio::run(server);
     }
 }
 
-fn handle_stream(stream: TcpStream, handler: Arc<Handler>) {
-    let result = read_request(stream)
-        .map_err(|e| eprintln!("read {:?}", e))
-        .and_then(move |(stream, request)| {
-            let response = handler(request);
-            response
-                .map_err(|e| eprintln!("body {:?}", e))
-                .and_then(|response| {
-                    let message = stringify_response(response);
-                    io::write_all(stream, message)
-                        .map_err(|e| eprintln!("write {:?}", e))
-                        .and_then(move |_| Ok(()))
-                })
-        });
+fn handle_stream(stream: TcpStream, handler: Arc<Handler>, use_loop: bool) {
+    let request = if use_loop {
+        read_request_loop(stream)
+    } else {
+        read_request(stream)
+    };
+    let result =
+        request
+            .map_err(|e| eprintln!("read {:?}", e))
+            .and_then(move |(stream, request)| {
+                let response = handler(request);
+                response
+                    .map_err(|e| eprintln!("body {:?}", e))
+                    .and_then(|response| {
+                        let message = stringify_response(response);
+                        io::write_all(stream, message)
+                            .map_err(|e| eprintln!("write {:?}", e))
+                            .and_then(move |_| Ok(()))
+                    })
+            });
 
     tokio::spawn(result);
 }
@@ -98,12 +108,25 @@ fn stringify_response(response: Response) -> String {
         response.body
     );
 }
-
 fn read_request(
     stream: TcpStream,
 ) -> Box<Future<Item = (TcpStream, Request), Error = std::io::Error> + Send> {
+    let result =
+        io::read(stream, vec![0; 1024]).and_then(move |(stream, bytes, size)| match parse_request(
+            &bytes[..size],
+            20,
+        ) {
+            ParseResult::Complete(request) => Ok((stream, request)),
+            ParseResult::Partial(_) => panic!("request message too large!!"),
+            ParseResult::Err(e) => panic!(e),
+        });
+    Box::new(result)
+}
+fn read_request_loop(
+    stream: TcpStream,
+) -> Box<Future<Item = (TcpStream, Request), Error = std::io::Error> + Send> {
     let result = future::loop_fn(
-        (stream, Vec::new(), 10),
+        (stream, Vec::new(), 20),
         move |(stream, mut buf, header_size)| {
             io::read(stream, vec![0; 1024]).and_then(move |(stream, bytes, size)| {
                 buf.extend_from_slice(&bytes[..size]);

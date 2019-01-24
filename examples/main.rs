@@ -15,6 +15,11 @@ fn main() {
                 .long("port")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("use_loop")
+                .long("use-loop")
+                .takes_value(true),
+        )
         .get_matches();
     let mut config: Configuration = Default::default();
     config.bind_port = matches
@@ -22,6 +27,8 @@ fn main() {
         .unwrap_or("9000")
         .parse()
         .expect("get bind port");
+    config.use_loop = matches.value_of("use_loop").unwrap_or("true") == "true";
+    println!("config: {:?}", config);
     let mut server = examplehttp::Server::new(config);
     server.with_handler(|request: Request| {
         let response = future::lazy(move || {
