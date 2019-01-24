@@ -14,6 +14,7 @@ extern crate tokio_threadpool;
 extern crate log;
 
 use futures::future;
+use std::net::Shutdown;
 use std::sync::Arc;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
@@ -98,15 +99,21 @@ fn handle_stream(
     let result = request
         .map_err(|e| error!("read {:?}", e))
         .and_then(move |(stream, request)| {
-            let response = handler(request);
-            response
+            handler(request)
                 .map_err(|e| error!("body {:?}", e))
-                .and_then(|response| {
-                    let message = stringify_response(response);
-                    io::write_all(stream, message)
-                        .map_err(|e| error!("write {:?}", e))
-                        .and_then(move |_| Ok(()))
-                })
+                .and_then(move |response| Ok((stream, response)))
+        })
+        .and_then(move |(stream, response)| {
+            let message = stringify_response(response);
+            io::write_all(stream, message)
+                .map_err(|e| error!("write {:?}", e))
+                .and_then(move |(stream, _)| Ok(stream))
+        })
+        .and_then(move |stream| {
+            stream
+                .shutdown(Shutdown::Both)
+                .map_err(|e| error!("shutdown {:?}", e))
+                .and_then(move |_| Ok(()))
         });
     executor.spawn(result);
 }
