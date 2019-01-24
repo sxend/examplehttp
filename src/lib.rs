@@ -129,31 +129,40 @@ fn read_request(
         move |(stream, mut buf, header_size)| {
             io::read(stream, vec![0; 1024]).and_then(move |(stream, bytes, size)| {
                 buf.extend_from_slice(&bytes[..size]);
-                parse_request(stream, buf, header_size)
+                match parse_request(&buf, header_size) {
+                    ParseResult::Complete(request) => Ok(future::Loop::Break((stream, request))),
+                    ParseResult::Partial(new_header_size) => {
+                        Ok(future::Loop::Continue((stream, buf, new_header_size)))
+                    }
+                    ParseResult::Err(e) => panic!(e),
+                }
             })
         },
     );
     Box::new(result)
 }
-type ParseLoopResult =
-    Result<future::Loop<(TcpStream, Request), (TcpStream, Vec<u8>, usize)>, std::io::Error>;
-fn parse_request(stream: TcpStream, buf: Vec<u8>, header_size: usize) -> ParseLoopResult {
+enum ParseResult {
+    Complete(Request),
+    Partial(usize),
+    Err(httparse::Error),
+}
+fn parse_request(buf: &[u8], header_size: usize) -> ParseResult {
     let mut parser = httparse::Request {
         method: None,
         path: None,
         version: None,
         headers: &mut vec![httparse::EMPTY_HEADER; header_size],
     };
-    match parser.parse(&buf) {
+    match parser.parse(buf) {
         Ok(result) => {
             if result.is_complete() {
-                Ok(future::Loop::Break((stream, convert_request(parser))))
+                ParseResult::Complete(convert_request(parser))
             } else {
-                Ok(future::Loop::Continue((stream, buf, header_size)))
+                ParseResult::Partial(header_size)
             }
         }
-        Err(httparse::Error::TooManyHeaders) => parse_request(stream, buf, header_size + 10),
-        Err(e) => panic!(e),
+        Err(httparse::Error::TooManyHeaders) => parse_request(buf, header_size + 10),
+        Err(e) => ParseResult::Err(e),
     }
 }
 fn convert_request(request: httparse::Request) -> Request {
