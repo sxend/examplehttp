@@ -79,11 +79,15 @@ impl Server {
             .incoming()
             .map_err(|e| error!("accept {:?}", e))
             .for_each(move |stream| {
+                prepare_stream(&stream);
                 handle_stream(stream, executor.clone(), handler.clone(), use_loop);
                 Ok(())
             });
         tokio::run(server);
     }
+}
+fn prepare_stream(stream: &TcpStream) {
+    stream.set_nodelay(true).expect("set tcp_nodelay");
 }
 
 fn handle_stream(
