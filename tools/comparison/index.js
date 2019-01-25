@@ -7,7 +7,25 @@ if (cluster.isMaster) {
     }
 } else {
     http.createServer((req, res) => {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end(`hi. process on ${cluster.worker.id}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(msg(req), null, "  "));
     }).listen(8889);
+}
+function msg(req) {
+    return {
+        request: {
+            version: req.httpVersion,
+            method: req.method,
+            path: req.url,
+            headers: Object.entries(req.headers).map(x => {
+                return {
+                    name: x[0],
+                    value: x[1]
+                };
+            })
+        },
+        ext: {
+            process_thread: cluster.worker && cluster.worker.id
+        }
+    };
 }
