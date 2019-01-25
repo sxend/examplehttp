@@ -114,7 +114,7 @@ fn handle_stream(
                 .map_err(|e| error!("write {:?}", e))
                 .and_then(move |(stream, _)| Ok(stream))
         })
-        .and_then(move |stream| {
+        .and_then(move |stream: TcpStream| {
             stream
                 .shutdown(Shutdown::Both)
                 .map_err(|e| error!("shutdown {:?}", e))
