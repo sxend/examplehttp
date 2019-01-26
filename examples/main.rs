@@ -72,6 +72,7 @@ fn main() {
     });
     server.start();
 }
+
 #[derive(Serialize, Deserialize, Clone)]
 struct Message {
     request: examplehttp::Request,
