@@ -47,6 +47,7 @@ fn main() {
     let _ = actix::System::new("basic-example");
     let _ = server::new(|| App::new().resource("/", |r| r.method(Method::GET).a(handler)))
         .workers(thread_pool_size)
+        .keep_alive(actix_web::server::KeepAlive::Disabled)
         .bind(format!("0.0.0.0:{}", bind_port))
         .expect("failed to bind")
         .run();
