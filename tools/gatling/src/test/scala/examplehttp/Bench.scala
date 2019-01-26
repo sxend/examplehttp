@@ -17,7 +17,7 @@ class Bench extends Simulation {
 
   setUp(
     scn.inject(
-      constantUsersPerSec(600) during (60 seconds)
+      constantUsersPerSec(config.getInt("constant-users")) during (config.getInt("during") seconds)
     )
   ).protocols(httpConf)
 
