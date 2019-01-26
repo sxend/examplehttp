@@ -87,6 +87,7 @@ impl Server {
     }
 }
 fn prepare_stream(stream: &TcpStream) {
+    stream.set_keepalive(Some(core::time::Duration::from_secs(5))).expect("set ka");
     stream.set_nodelay(true).expect("set tcp_nodelay");
 }
 
