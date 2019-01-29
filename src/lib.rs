@@ -10,6 +10,7 @@ extern crate tokio_executor;
 extern crate tokio_io;
 extern crate tokio_net;
 extern crate tokio_threadpool;
+extern crate tokio_tls;
 #[macro_use]
 extern crate log;
 
@@ -71,7 +72,6 @@ impl Server {
             .parse()
             .unwrap_or_else(|_| panic!("parse bind_address: {}", bind_address));
         let listener = TcpListener::bind(&address).unwrap_or_else(|_| panic!("bind: {}", address));
-
         let handler = self.handler.clone();
         let executor = self.executor.clone();
         let use_loop = self.config.use_loop;
@@ -87,7 +87,9 @@ impl Server {
     }
 }
 fn prepare_stream(stream: &TcpStream) {
-    stream.set_keepalive(Some(core::time::Duration::from_secs(5))).expect("set ka");
+    stream
+        .set_keepalive(Some(core::time::Duration::from_secs(5)))
+        .expect("set ka");
     stream.set_nodelay(true).expect("set tcp_nodelay");
 }
 
