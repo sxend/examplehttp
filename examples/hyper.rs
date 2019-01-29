@@ -72,7 +72,14 @@ fn main() {
 type BoxFut = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
 fn service(req: Request<Body>) -> BoxFut {
-    let result = future::lazy(|| Ok(Response::new(Body::from(make_body(req)))));
+    let result = future::lazy(|| {
+        let response = http::response::Builder::new()
+            .status(200)
+            .header("Content-Type", "application/json")
+            .body(Body::from(make_body(req)))
+            .expect("make response");
+        Ok(response)
+    });
     Box::new(result)
 }
 fn make_body(req: Request<Body>) -> String {
