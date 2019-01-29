@@ -16,7 +16,7 @@ class Bench extends Simulation {
     .userAgentHeader("Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1")
 
   val scn = scenario(s"$targetName-simulation")
-    .exec(http(s"request-$targetName").get("/"))
+    .exec(http(url).get("/"))
 
   setUp(
     scn.inject(
