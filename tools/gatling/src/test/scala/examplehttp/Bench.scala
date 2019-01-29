@@ -8,8 +8,11 @@ import scala.concurrent.duration._
 
 class Bench extends Simulation {
   val config = ConfigFactory.load
+  val targetName = config.getString("target-name")
+  val targetConfig = config.getConfig(s"targets.$targetName")
+  val url = s"http://${targetConfig.getString("host")}:${targetConfig.getInt("port")}"
   val httpConf = http
-    .baseURL(s"http://${config.getString("target-address")}")
+    .baseURL(url)
     .userAgentHeader("Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1")
 
   val scn = scenario("HealthSimulation")
