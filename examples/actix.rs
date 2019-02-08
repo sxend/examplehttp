@@ -33,6 +33,12 @@ fn main() {
                 .takes_value(true)
                 .default_value("4"),
         )
+        .arg(
+            Arg::with_name("sleep")
+                .long("sleep")
+                .takes_value(true)
+                .default_value("0"),
+        )
         .get_matches();
     let bind_port: u32 = matches
         .value_of("port")
@@ -44,6 +50,11 @@ fn main() {
         .unwrap_or("4")
         .parse()
         .expect("get thread_pool_size");
+    let _sleep: u64 = matches
+        .value_of("sleep")
+        .unwrap_or_default()
+        .parse()
+        .expect("sleep ms u64");
     let _ = actix::System::new("basic-example");
     let _ = server::new(|| App::new().resource("/", |r| r.method(Method::GET).a(handler)))
         .workers(thread_pool_size)

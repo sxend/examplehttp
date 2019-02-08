@@ -35,6 +35,12 @@ fn main() {
                 .takes_value(true)
                 .default_value("4"),
         )
+        .arg(
+            Arg::with_name("sleep")
+                .long("sleep")
+                .takes_value(true)
+                .default_value("0"),
+        )
         .get_matches();
     let mut config: Configuration = Default::default();
     config.bind_port = matches
@@ -48,6 +54,11 @@ fn main() {
         .unwrap_or_default()
         .parse()
         .expect("thread pool size");
+    let _sleep: u64 = matches
+        .value_of("sleep")
+        .unwrap_or_default()
+        .parse()
+        .expect("sleep ms u64");
     info!("config: {:?}", config);
     let mut server = examplehttp::Server::new(config);
     server.with_handler(|request: Request| {

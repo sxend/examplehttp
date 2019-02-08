@@ -36,6 +36,12 @@ fn main() {
                 .takes_value(true)
                 .default_value("4"),
         )
+        .arg(
+            Arg::with_name("sleep")
+                .long("sleep")
+                .takes_value(true)
+                .default_value("0"),
+        )
         .get_matches();
     let bind_port: u32 = matches
         .value_of("port")
@@ -50,7 +56,11 @@ fn main() {
     let address = format!("0.0.0.0:{}", bind_port)
         .parse()
         .expect("parse bind_address: {}");
-
+    let _sleep: u64 = matches
+        .value_of("sleep")
+        .unwrap_or_default()
+        .parse()
+        .expect("sleep ms u64");
     let server = Server::bind(&address)
         .tcp_nodelay(true)
         .tcp_keepalive(Some(std::time::Duration::from_secs(2)))
