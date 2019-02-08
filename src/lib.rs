@@ -43,18 +43,22 @@ impl Configuration {}
 
 pub struct Server {
     config: Configuration,
-    handler: Arc<Handler>,
+    handler: Arc<Box<Handler>>,
     executor: Arc<ThreadPool>,
 }
 
-type Handler = fn(Request) -> Box<Future<Item = Response, Error = std::io::Error> + Send>;
+pub trait Handler: Send + Sync {
+    fn handle(&self, request: Request) -> BoxFut;
+}
+
+pub type BoxFut = Box<Future<Item = Response, Error = std::io::Error> + Send>;
 
 impl Server {
     pub fn new(config: Configuration) -> Self {
         let thread_pool_size = config.thread_pool_size;
         Server {
             config,
-            handler: Arc::new(NO_HANDLER),
+            handler: Arc::new(no_handler()),
             executor: Arc::new(
                 tokio_threadpool::Builder::new()
                     .pool_size(thread_pool_size)
@@ -63,7 +67,7 @@ impl Server {
             ),
         }
     }
-    pub fn with_handler(&mut self, handler: Handler) {
+    pub fn with_handler(&mut self, handler: Box<Handler>) {
         self.handler = Arc::new(handler);
     }
     pub fn start(&self) {
@@ -96,7 +100,7 @@ fn prepare_stream(stream: &TcpStream) {
 fn handle_stream(
     stream: TcpStream,
     executor: Arc<ThreadPool>,
-    handler: Arc<Handler>,
+    handler: Arc<Box<Handler>>,
     use_loop: bool,
 ) {
     let request = if use_loop {
@@ -107,7 +111,8 @@ fn handle_stream(
     let result = request
         .map_err(|e| error!("read {:?}", e))
         .and_then(move |(stream, request)| {
-            handler(request)
+            handler
+                .handle(request)
                 .map_err(|e| error!("body {:?}", e))
                 .and_then(move |response| Ok((stream, response)))
         })
@@ -125,13 +130,18 @@ fn handle_stream(
         });
     executor.spawn(result);
 }
-
-const NO_HANDLER: Handler = |_| {
-    Box::new(future::ok(Response {
-        content_type: "text/plain".to_owned(),
-        body: "no handler".to_owned(),
-    }))
-};
+struct NoHandler {}
+impl Handler for NoHandler {
+    fn handle(&self, _request: Request) -> BoxFut {
+        Box::new(future::ok(Response {
+            content_type: "text/plain".to_owned(),
+            body: "no handler".to_owned(),
+        }))
+    }
+}
+fn no_handler() -> Box<Handler> {
+    Box::new(NoHandler {})
+}
 
 fn stringify_response(response: Response) -> String {
     return format!(

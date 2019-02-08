@@ -54,15 +54,28 @@ fn main() {
         .unwrap_or_default()
         .parse()
         .expect("thread pool size");
-    let _sleep: u64 = matches
+    let sleep: u64 = matches
         .value_of("sleep")
         .unwrap_or_default()
         .parse()
         .expect("sleep ms u64");
     info!("config: {:?}", config);
     let mut server = examplehttp::Server::new(config);
-    server.with_handler(|request: Request| {
+    server.with_handler(Box::new(MyHandler { sleep }));
+    server.start();
+}
+
+struct MyHandler {
+    sleep: u64,
+}
+unsafe impl Send for MyHandler {}
+unsafe impl Sync for MyHandler {}
+
+impl examplehttp::Handler for MyHandler {
+    fn handle(&self, request: Request) -> examplehttp::BoxFut {
+        let sleep = self.sleep;
         let response = future::lazy(move || {
+            println!("{}", sleep);
             let current_thread = std::thread::current();
             Ok(Response {
                 content_type: "application/json".to_owned(),
@@ -80,8 +93,7 @@ fn main() {
             })
         });
         Box::new(response)
-    });
-    server.start();
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
