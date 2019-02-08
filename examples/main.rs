@@ -75,7 +75,9 @@ impl examplehttp::Handler for MyHandler {
     fn handle(&self, request: Request) -> examplehttp::BoxFut {
         let sleep = self.sleep;
         let response = future::lazy(move || {
-            println!("{}", sleep);
+            if sleep > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(sleep));
+            }
             let current_thread = std::thread::current();
             Ok(Response {
                 content_type: "application/json".to_owned(),
