@@ -3,6 +3,12 @@
 prepare
 
 ```
+# on app
+curl https://sh.rustup.rs -sSf | sh
+sudo apt install git build-essential pkg-config libssl-dev
+
+# on stresser
+
 curl -sL https://github.com/shyiko/jabba/raw/master/install.sh | bash && . ~/.jabba/jabba.sh
 jabba install adopt-openj9@1.8.192-12
 jabba alias default adopt-openj9@1.8.192-12
