@@ -21,6 +21,8 @@ tokio-executor = "0.1.6"
 log = "0.4.6"
 tokio-tls = "0.2.1"
 tokio-timer = "0.2.10"
+timer = "0.2.0"
+chrono = "0.4.6"
 
 [dev-dependencies]
 clap = "2.32.0"

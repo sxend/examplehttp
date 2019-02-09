@@ -225,7 +225,7 @@ fn convert_request(request: httparse::Request) -> Request {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Request {
     pub version: u8,
     pub method: String,
@@ -233,13 +233,13 @@ pub struct Request {
     pub headers: Vec<Header>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Response {
     pub content_type: String,
     pub body: String,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Header {
     pub name: String,
     pub value: String,

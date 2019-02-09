@@ -7,11 +7,15 @@ extern crate serde;
 extern crate serde_json;
 #[macro_use]
 extern crate log;
+extern crate chrono;
 extern crate env_logger;
+extern crate timer;
+extern crate tokio_timer;
 
 use clap::{App, Arg};
 use examplehttp::{Configuration, Request, Response};
 use futures::future;
+use std::sync::mpsc::channel;
 
 fn main() {
     env_logger::init();
@@ -75,24 +79,31 @@ impl examplehttp::Handler for MyHandler {
     fn handle(&self, request: Request) -> examplehttp::BoxFut {
         let sleep = self.sleep;
         let response = future::lazy(move || {
-            if sleep > 0 {
-                std::thread::sleep(std::time::Duration::from_millis(sleep));
-            }
-            let current_thread = std::thread::current();
-            Ok(Response {
-                content_type: "application/json".to_owned(),
-                body: serde_json::to_string_pretty(&Message {
-                    request,
-                    ext: Ext {
-                        process_thread: format!(
-                            "{}:{:?}",
-                            current_thread.name().expect("get thread name"),
-                            current_thread.id()
-                        ),
-                    },
-                })
-                .expect("serialize request"),
-            })
+            let timer = timer::Timer::new();
+            let (tx, rx) = channel();
+            let _guard = timer.schedule_with_delay(
+                chrono::Duration::milliseconds(sleep as i64),
+                move || {
+                    let request = request.clone();
+                    let current_thread = std::thread::current();
+                    let response = Response {
+                        content_type: "application/json".to_owned(),
+                        body: serde_json::to_string_pretty(&Message {
+                            request,
+                            ext: Ext {
+                                process_thread: format!(
+                                    "{}:{:?}",
+                                    current_thread.name().expect("get thread name"),
+                                    current_thread.id()
+                                ),
+                            },
+                        })
+                        .expect("serialize request"),
+                    };
+                    let _ignore = tx.send(Ok(response));
+                },
+            );
+            rx.recv().expect("receive response")
         });
         Box::new(response)
     }
