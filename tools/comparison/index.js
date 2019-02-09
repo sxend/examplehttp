@@ -7,8 +7,10 @@ if (cluster.isMaster) {
     }
 } else {
     http.createServer((req, res) => {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(msg(req), null, "  "));
+        setTimeout(() => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(msg(req), null, "  "));
+        }, 5000)
     }).listen(8889);
 }
 function msg(req) {
