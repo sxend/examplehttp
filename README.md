@@ -6,6 +6,7 @@ prepare
 # on app
 curl https://sh.rustup.rs -sSf | sh
 sudo apt install git build-essential pkg-config libssl-dev
+wget -qO- https://raw.githubusercontent.com/creationix/nvm/v0.34.0/install.sh | bash
 
 # on stresser
 
