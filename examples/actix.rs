@@ -14,8 +14,8 @@ use actix_web::http::header::{HeaderName, HeaderValue};
 use actix_web::http::Method;
 use actix_web::{server, App, HttpRequest, HttpResponse};
 use clap::{App as ClapApp, Arg};
-use future::FutureResult;
-use futures::future;
+use futures::Future;
+use std::time::Duration;
 
 fn main() {
     env_logger::init();
@@ -62,8 +62,7 @@ fn main() {
         .expect("failed to bind")
         .run();
 }
-fn handler(req: &HttpRequest) -> FutureResult<HttpResponse, actix_web::Error> {
-    let current_thread = std::thread::current();
+fn handler(req: &HttpRequest) -> impl Future<Item=HttpResponse, Error=actix_web::Error> {
     let mut headers = Vec::new();
     for header in req.headers().iter() {
         let name: &HeaderName = header.0;
@@ -73,26 +72,35 @@ fn handler(req: &HttpRequest) -> FutureResult<HttpResponse, actix_web::Error> {
             value: value.to_str().expect("header value parse").to_owned(),
         })
     }
-    let message = Message {
-        request: ActixRequest {
-            version: format!("{:?}", req.version()),
-            method: req.method().as_str().to_owned(),
-            path: req.path().to_string(),
-            headers,
-        },
-        ext: Ext {
-            process_thread: format!(
-                "{}:{:?}",
-                current_thread.name().expect("get thread name"),
-                current_thread.id()
-            ),
-        },
-    };
-    future::result(Ok(HttpResponse::Ok()
-        .content_type("application/json")
-        .body(
-            serde_json::to_string_pretty(&message).expect("serialize request"),
-        )))
+    let version = format!("{:?}", req.version());
+    let method = req.method().as_str().to_owned();
+    let path = req.path().to_string();
+
+    futures::lazy( move || {
+        let current_thread = std::thread::current();
+        let message = Message {
+            request: ActixRequest {
+                version,
+                method,
+                path,
+                headers,
+            },
+            ext: Ext {
+                process_thread: format!(
+                    "{}:{:?}",
+                    current_thread.name().expect("get thread name"),
+                    current_thread.id()
+                ),
+            },
+        };
+        std::thread::sleep(Duration::from_millis(3000));
+        Ok(HttpResponse::Ok()
+            .content_type("application/json")
+            .body(
+                serde_json::to_string_pretty(&message).expect("serialize request"),
+            ))
+    })
+
 }
 
 #[derive(Serialize, Deserialize, Clone)]
