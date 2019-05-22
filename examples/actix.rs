@@ -14,8 +14,8 @@ use actix_web::http::header::{HeaderName, HeaderValue};
 use actix_web::http::Method;
 use actix_web::{server, App, HttpRequest, HttpResponse};
 use clap::{App as ClapApp, Arg};
-use future::FutureResult;
 use futures::future;
+use futures::Future;
 
 fn main() {
     env_logger::init();
@@ -62,7 +62,7 @@ fn main() {
         .expect("failed to bind")
         .run();
 }
-fn handler(req: &HttpRequest) -> FutureResult<HttpResponse, actix_web::Error> {
+fn handler(req: &HttpRequest) -> impl Future<Item=HttpResponse, Error=actix_web::Error> {
     let current_thread = std::thread::current();
     let mut headers = Vec::new();
     for header in req.headers().iter() {
