@@ -47,7 +47,7 @@ fn main() {
         .expect("get bind port");
     let thread_pool_size: usize = matches
         .value_of("thread_pool_size")
-        .unwrap_or("4")
+        .unwrap_or("1")
         .parse()
         .expect("get thread_pool_size");
     let _sleep: u64 = matches

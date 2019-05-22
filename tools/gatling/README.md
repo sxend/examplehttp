@@ -1,4 +1,4 @@
 
 ```
-TARGET_ADDRESS="localhost:8888" sbt "gatling:testOnly examplehttp.Bench"
+TARGET_NAME=<> TARGET_HOST=localhost sbt "gatling:testOnly examplehttp.Bench"
 ```
