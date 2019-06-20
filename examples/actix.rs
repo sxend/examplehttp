@@ -62,7 +62,7 @@ fn main() {
         .expect("failed to bind")
         .run();
 }
-fn handler(req: &HttpRequest) -> impl Future<Item=HttpResponse, Error=actix_web::Error> {
+fn handler(req: &HttpRequest) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
     let current_thread = std::thread::current();
     let mut headers = Vec::new();
     for header in req.headers().iter() {
