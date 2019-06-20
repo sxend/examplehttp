@@ -14,7 +14,7 @@ fn main() {
     let server = TcpListener::bind(&addr).expect("bind failed");
     let accept_poll = Poll::new().expect("accept poll start failed");
     let writable_poll = Poll::new().expect("writable poll start failed");
-    let mut accept_events = Events::with_capacity(1024);
+    let mut accept_events = Events::with_capacity(2048);
     let mut writable_events = Events::with_capacity(1024);
     let mut counter: usize = 0;
     let mut streams: HashMap<usize, TcpStream> = HashMap::new();
@@ -27,19 +27,24 @@ fn main() {
             .poll(&mut accept_events, Some(Duration::from_millis(10)))
             .unwrap();
         for event in accept_events.iter() {
+            println!("contains accept event");
             match event.token() {
                 ACCEPTABLE => {
                     let (stream, _) = server.accept().expect("accept failed");
                     println!("get acceptable stream");
                     writable_poll
-                        .register(&stream, Token(counter), Ready::all(), PollOpt::edge())
+                        .register(&stream, Token(counter), Ready::writable(), PollOpt::edge())
                         .unwrap();
                     streams.insert(counter, stream);
                     counter = counter + 1;
                 }
-                _ => break,
+                _ => {
+                    println!("accept_events unknown token");
+                    break;
+                }
             }
         }
+        accept_events.clear();
         writable_poll
             .poll(&mut writable_events, Some(Duration::from_millis(10)))
             .unwrap();
@@ -53,6 +58,7 @@ fn main() {
             let handle = std::thread::spawn(move || send_response(stream));
             threads.push(handle);
         }
+        writable_events.clear();
     }
     for handle in threads {
         println!("join!!");
@@ -67,5 +73,8 @@ fn send_response(mut stream: TcpStream) {
     stream
         .write(contents.as_bytes())
         .expect("write bytes failed");
-    stream.shutdown(Shutdown::Both).expect("shutdown failed");
+    match stream.shutdown(Shutdown::Both) {
+        Ok(result) => println!("shutdown finish"),
+        Err(e) => println!("shutdown failed. {}", e),
+    }
 }
