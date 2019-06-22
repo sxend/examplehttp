@@ -14,8 +14,8 @@ use actix_web::http::header::{HeaderName, HeaderValue};
 use actix_web::http::Method;
 use actix_web::{server, App, HttpRequest, HttpResponse};
 use clap::{App as ClapApp, Arg};
-use futures::Future;
 use std::time::Duration;
+use futures::Future;
 
 fn main() {
     env_logger::init();
@@ -47,7 +47,7 @@ fn main() {
         .expect("get bind port");
     let thread_pool_size: usize = matches
         .value_of("thread_pool_size")
-        .unwrap_or("4")
+        .unwrap_or("1")
         .parse()
         .expect("get thread_pool_size");
     let _sleep: u64 = matches
@@ -62,7 +62,7 @@ fn main() {
         .expect("failed to bind")
         .run();
 }
-fn handler(req: &HttpRequest) -> impl Future<Item=HttpResponse, Error=actix_web::Error> {
+fn handler(req: &HttpRequest) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
     let mut headers = Vec::new();
     for header in req.headers().iter() {
         let name: &HeaderName = header.0;
