@@ -13,7 +13,7 @@ fn main() {
     let server = TcpListener::bind(&addr).expect("bind failed");
     let poll = Poll::new().expect("accept poll start failed");
     let mut events = Events::with_capacity(2048);
-    let mut counter: usize = 1;
+    let mut counter: usize = 10;
     let mut streams: HashMap<usize, TcpStream> = HashMap::new();
 
     poll.register(&server, ACCEPTABLE, Ready::readable(), PollOpt::edge())
