@@ -14,8 +14,8 @@ use actix_web::http::header::{HeaderName, HeaderValue};
 use actix_web::http::Method;
 use actix_web::{server, App, HttpRequest, HttpResponse};
 use clap::{App as ClapApp, Arg};
-use std::time::Duration;
 use futures::Future;
+use std::time::Duration;
 
 fn main() {
     env_logger::init();
@@ -76,7 +76,7 @@ fn handler(req: &HttpRequest) -> impl Future<Item = HttpResponse, Error = actix_
     let method = req.method().as_str().to_owned();
     let path = req.path().to_string();
 
-    futures::lazy( move || {
+    futures::lazy(move || {
         let current_thread = std::thread::current();
         let message = Message {
             request: ActixRequest {
@@ -96,11 +96,8 @@ fn handler(req: &HttpRequest) -> impl Future<Item = HttpResponse, Error = actix_
         std::thread::sleep(Duration::from_millis(3000));
         Ok(HttpResponse::Ok()
             .content_type("application/json")
-            .body(
-                serde_json::to_string_pretty(&message).expect("serialize request"),
-            ))
+            .body(serde_json::to_string_pretty(&message).expect("serialize request")))
     })
-
 }
 
 #[derive(Serialize, Deserialize, Clone)]
