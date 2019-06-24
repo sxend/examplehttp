@@ -25,6 +25,7 @@ fn main() {
             match event.token() {
                 ACCEPTABLE => {
                     let (stream, _) = server.accept().expect("accept failed");
+                    stream.set_nodelay(true).expect("enable tcp nodelay failed");
                     poll.register(&stream, Token(counter), Ready::writable(), PollOpt::edge())
                         .unwrap();
                     streams.insert(counter, stream);
