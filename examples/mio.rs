@@ -12,7 +12,7 @@ fn main() {
     let addr = "127.0.0.1:8888".parse().expect("addr parse failed");
     let server = TcpListener::bind(&addr).expect("bind failed");
     let poll = Poll::new().expect("accept poll start failed");
-    let mut events = Events::with_capacity(2048);
+    let mut events = Events::with_capacity(1024);
     let mut counter: usize = 10;
     let mut streams: HashMap<usize, TcpStream> = HashMap::new();
 
@@ -36,9 +36,7 @@ fn main() {
                     poll.deregister(&stream).expect("deregister writable");
                     send_response(stream);
                 }
-                token => {
-                    println!("unknown token {:?}", token);
-                }
+                _ => unreachable!(),
             }
         }
         events.clear();
