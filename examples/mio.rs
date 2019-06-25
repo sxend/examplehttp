@@ -31,10 +31,13 @@ fn main() {
                     streams.insert(counter, stream);
                     counter = counter + 1;
                 }
-                token => {
+                token if token.0 >= 10 && event.readiness().is_writable() => {
                     let stream = streams.remove(&token.0).expect("unexpected stream id");
                     poll.deregister(&stream).expect("deregister writable");
                     send_response(stream);
+                }
+                token => {
+                    println!("unknown token {:?}", token);
                 }
             }
         }
