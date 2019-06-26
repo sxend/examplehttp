@@ -1,9 +1,9 @@
 extern crate mio;
 use mio::net::*;
-use mio::tcp::Shutdown;
 use mio::*;
 use std::collections::HashMap;
 use std::io::Write;
+use std::net::Shutdown;
 use std::time::Duration;
 
 const ACCEPTABLE: Token = Token(0);
