@@ -2,6 +2,7 @@ extern crate mio;
 use mio::net::*;
 use mio::*;
 use std::collections::HashMap;
+use std::io::Read;
 use std::io::Write;
 use std::net::Shutdown;
 use std::time::Duration;
@@ -26,14 +27,15 @@ fn main() {
                 ACCEPTABLE => {
                     let (stream, _) = server.accept().expect("failed accept");
                     stream.set_nodelay(true).expect("failed enable tcp nodelay");
-                    poll.register(&stream, Token(counter), Ready::writable(), PollOpt::edge())
+                    poll.register(&stream, Token(counter), Ready::readable(), PollOpt::edge())
                         .expect("failed register stream writable");
                     streams.insert(counter, stream);
                     counter = counter + 1;
                 }
-                Token(count) if count >= 10 && event.readiness().is_writable() => {
-                    let stream = streams.remove(&count).expect("unexpected stream id");
+                Token(count) if count >= 10 && event.readiness().is_readable() => {
+                    let mut stream = streams.remove(&count).expect("unexpected stream id");
                     poll.deregister(&stream).expect("deregister writable");
+                    stream.read(&mut [0; 1024]).unwrap();
                     send_response(stream);
                 }
                 _ => unreachable!(),
