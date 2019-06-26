@@ -17,17 +17,17 @@ fn main() {
     let mut streams: HashMap<usize, TcpStream> = HashMap::new();
 
     poll.register(&server, ACCEPTABLE, Ready::readable(), PollOpt::edge())
-        .unwrap();
+        .expect("failed register server accept");
     loop {
         poll.poll(&mut events, Some(Duration::from_millis(10)))
-            .unwrap();
+            .expect("failed poll events");
         for event in events.iter() {
             match event.token() {
                 ACCEPTABLE => {
-                    let (stream, _) = server.accept().expect("accept failed");
-                    stream.set_nodelay(true).expect("enable tcp nodelay failed");
+                    let (stream, _) = server.accept().expect("failed accept");
+                    stream.set_nodelay(true).expect("failed enable tcp nodelay");
                     poll.register(&stream, Token(counter), Ready::writable(), PollOpt::edge())
-                        .unwrap();
+                        .expect("failed register stream writable");
                     streams.insert(counter, stream);
                     counter = counter + 1;
                 }
@@ -46,7 +46,7 @@ fn send_response(mut stream: TcpStream) {
     let contents = "HTTP/1.1 200 OK\r\nServer: MIOHttpServer\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 0\r\nConnection: Close\r\n\r\n";
     stream
         .write(contents.as_bytes())
-        .expect("write bytes failed");
+        .expect("failed write bytes");
     match stream.shutdown(Shutdown::Both) {
         Ok(_) => (),
         Err(e) => println!("shutdown failed. {}", e),
