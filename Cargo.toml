@@ -27,7 +27,7 @@ chrono = "0.4.6"
 [dev-dependencies]
 clap = "2.32.0"
 env_logger = "0.6.0"
-actix = "0.7.9"
-actix-web = "0.7.18"
+actix = "0.8.3"
+actix-web = "1.0.3"
 hyper = "0.12.23"
-mio = "0.6.19"
+mio = { git = "https://github.com/tokio-rs/mio", branch = "master" }
