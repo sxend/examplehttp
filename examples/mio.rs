@@ -26,13 +26,14 @@ fn main() {
         for event in events.iter() {
             match event.token() {
                 ACCEPTABLE => {
-                    let (stream, _) = server.accept().expect("failed accept");
-                    stream.set_nodelay(true).expect("failed enable tcp nodelay");
-                    registry
-                        .register(&stream, Token(counter), Interests::READABLE)
-                        .expect("failed register stream writable");
-                    streams.insert(counter, stream);
-                    counter = counter + 1;
+                    while let Ok((stream, _)) = server.accept() {
+                        stream.set_nodelay(true).expect("failed enable tcp nodelay");
+                        registry
+                            .register(&stream, Token(counter), Interests::READABLE)
+                            .expect("failed register stream writable");
+                        streams.insert(counter, stream);
+                        counter = counter + 1;
+                    }
                 }
                 Token(count) if count >= 10 && event.is_readable() => {
                     let mut stream = streams.remove(&count).expect("unexpected stream id");
@@ -53,6 +54,6 @@ fn send_response(mut stream: TcpStream) {
         .expect("failed write bytes");
     match stream.shutdown(Shutdown::Both) {
         Ok(_) => (),
-        Err(e) => println!("shutdown failed. {}", e),
+        Err(e) => eprintln!("shutdown failed. {}", e),
     }
 }
