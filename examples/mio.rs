@@ -44,7 +44,6 @@ fn main() {
                 _ => unreachable!(),
             }
         }
-        events.clear();
     }
 }
 fn send_response(mut stream: TcpStream) {
